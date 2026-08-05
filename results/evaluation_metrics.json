@@ -1,0 +1,72 @@
+{
+    "test_accuracy": 0.765079365079365,
+    "macro_precision": 0.806326524843316,
+    "macro_recall": 0.7982706971677559,
+    "macro_f1_score": 0.7859403956167915,
+    "weighted_f1_score": 0.7622582431937037,
+    "confusion_matrix": [
+        [
+            69,
+            8,
+            3,
+            40
+        ],
+        [
+            2,
+            37,
+            0,
+            12
+        ],
+        [
+            1,
+            0,
+            53,
+            0
+        ],
+        [
+            5,
+            3,
+            0,
+            82
+        ]
+    ],
+    "classification_report": {
+        "Adenocarcinoma": {
+            "precision": 0.8961038961038961,
+            "recall": 0.575,
+            "f1-score": 0.700507614213198,
+            "support": 120.0
+        },
+        "Large Cell Carcinoma": {
+            "precision": 0.7708333333333334,
+            "recall": 0.7254901960784313,
+            "f1-score": 0.7474747474747475,
+            "support": 51.0
+        },
+        "Normal": {
+            "precision": 0.9464285714285714,
+            "recall": 0.9814814814814815,
+            "f1-score": 0.9636363636363636,
+            "support": 54.0
+        },
+        "Squamous Cell Carcinoma": {
+            "precision": 0.6119402985074627,
+            "recall": 0.9111111111111111,
+            "f1-score": 0.7321428571428571,
+            "support": 90.0
+        },
+        "accuracy": 0.765079365079365,
+        "macro avg": {
+            "precision": 0.806326524843316,
+            "recall": 0.7982706971677559,
+            "f1-score": 0.7859403956167915,
+            "support": 315.0
+        },
+        "weighted avg": {
+            "precision": 0.8032594833501017,
+            "recall": 0.765079365079365,
+            "f1-score": 0.7622582431937037,
+            "support": 315.0
+        }
+    }
+}
