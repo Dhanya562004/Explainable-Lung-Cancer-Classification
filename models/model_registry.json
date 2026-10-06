@@ -1,0 +1,31 @@
+{
+    "active_version": "v1.0.0-xception",
+    "registry": {
+        "v1.0.0-xception": {
+            "version": "v1.0.0-xception",
+            "architecture": "Xception Transfer Learning (2-Stage Fine-Tuning)",
+            "base_model": "Xception (ImageNet pre-trained)",
+            "num_parameters": 21092804,
+            "trainable_parameters": 3613060,
+            "created_at": "2026-10-06",
+            "dataset_version": "Chest CT-Scan Dataset (4 Classes)",
+            "input_shape": [299, 299, 3],
+            "num_classes": 4,
+            "metrics": {
+                "test_accuracy": 0.7651,
+                "macro_precision": 0.8063,
+                "macro_recall": 0.7983,
+                "macro_f1_score": 0.7859,
+                "weighted_f1_score": 0.7623
+            },
+            "training_config": {
+                "learning_rate_stage1": 0.001,
+                "learning_rate_stage2": 0.00001,
+                "batch_size": 16,
+                "fine_tune_layers": 30,
+                "optimizer": "Adam"
+            },
+            "checksum": "sha256:d8f94a2b1001e38947f6319842aef982c"
+        }
+    }
+}
