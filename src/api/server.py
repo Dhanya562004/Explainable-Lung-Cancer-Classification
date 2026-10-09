@@ -1,15 +1,22 @@
 import io
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
+import time
+from datetime import datetime, timezone
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from PIL import Image
 
-from src.config import MEDICAL_DISCLAIMER
-from src.models.inference import predict_ct_scan
+from src.config import MEDICAL_DISCLAIMER, DEFAULT_MODEL_PATH
+from src.models.inference import predict_ct_scan, get_model
 from src.models.model_registry import get_active_model_info
 from src.evaluation.evaluate import evaluate_model
 from src.monitoring.latency import get_latency_stats
 from src.monitoring.performance import log_ground_truth_feedback, get_verified_performance_metrics
 from src.monitoring.health import check_system_health
+from src.monitoring.telemetry import metrics_manager
+from src.logging.structured_logger import app_logger
+
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB limit
 
 app = FastAPI(
     title="Explainable Lung Cancer Classification REST API",
@@ -31,6 +38,43 @@ def root():
         "docs": "/docs"
     }
 
+@app.get("/health/live", summary="Liveness Probe")
+def health_live():
+    """
+    Lightweight probe verifying that the API server process is alive and responding.
+    """
+    return {
+        "status": "alive",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/health/ready", summary="Readiness Probe")
+def health_ready(response: Response):
+    """
+    Reports whether required model artifacts and core dependencies are ready to process predictions.
+    """
+    try:
+        model = get_model()
+        is_ready = model is not None
+    except Exception as e:
+        app_logger.error(f"Readiness check failed: {e}")
+        is_ready = False
+
+    if is_ready:
+        return {
+            "status": "ready",
+            "model_loaded": True,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    else:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "not_ready",
+            "model_loaded": False,
+            "reason": "Model artifact failed to initialize",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
 @app.get("/health", summary="System & Model Health Check")
 def health_check():
     """
@@ -38,6 +82,31 @@ def health_check():
     """
     health = check_system_health()
     return health
+
+@app.get("/model/status", summary="Model Operational Diagnostic Status")
+def model_status():
+    """
+    Returns operational diagnostic information without exposing sensitive system paths.
+    """
+    info = get_active_model_info()
+    model_loaded = False
+    try:
+        model = get_model()
+        model_loaded = model is not None
+    except Exception:
+        model_loaded = False
+
+    return {
+        "active_version": info.get("version", "v1.0.0-xception"),
+        "architecture": info.get("architecture", "Xception"),
+        "model_loaded": model_loaded,
+        "parameters": {
+            "total": info.get("num_parameters", 21092804),
+            "trainable": info.get("trainable_parameters", 3613060)
+        },
+        "input_shape": [299, 299, 3],
+        "framework": "TensorFlow / Keras"
+    }
 
 @app.get("/model/info", summary="Active Model Registry Metadata")
 def model_info():
@@ -53,23 +122,63 @@ async def predict_endpoint(file: UploadFile = File(...)):
     Accepts a chest CT scan image (PNG, JPG, JPEG) and returns structured classification probabilities,
     confidence score, latency, confidence level, and human review recommendation.
     """
-    if not file.content_type.startswith("image/"):
+    start_time = time.perf_counter()
+
+    # Validate file type / content-type header
+    if file.content_type and not file.content_type.startswith("image/"):
+        metrics_manager.record_prediction(status="failure", latency_ms=0.0)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file format. Upload a valid PNG, JPG, or JPEG image."
         )
 
+    # Read content with upload size boundary enforcement
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert('RGB')
-    except Exception:
+    except Exception as e:
+        metrics_manager.record_prediction(status="failure", latency_ms=0.0)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not decode image file. File may be corrupted."
+            detail="Could not read uploaded file content."
+        )
+
+    if len(contents) > MAX_UPLOAD_SIZE_BYTES:
+        metrics_manager.record_prediction(status="failure", latency_ms=0.0)
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File payload exceeds maximum limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB."
+        )
+
+    if len(contents) == 0:
+        metrics_manager.record_prediction(status="failure", latency_ms=0.0)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file upload provided."
+        )
+
+    try:
+        image = Image.open(io.BytesIO(contents)).convert('RGB')
+    except Exception:
+        metrics_manager.record_prediction(status="failure", latency_ms=0.0)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not decode image file. File may be corrupted or unreadable."
         )
 
     try:
         res = predict_ct_scan(image)
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+
+        metrics_manager.record_prediction(
+            status="success",
+            latency_ms=latency_ms,
+            confidence_level=res.get("confidence_level", "MEDIUM")
+        )
+
+        app_logger.info(
+            f"Prediction completed: id={res['prediction_id']} class={res['predicted_class']} conf={res['confidence']:.2f}%"
+        )
+
         return {
             "prediction_id": res["prediction_id"],
             "predicted_class": res["predicted_class"],
@@ -84,6 +193,9 @@ async def predict_endpoint(file: UploadFile = File(...)):
             "disclaimer": MEDICAL_DISCLAIMER
         }
     except Exception as e:
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        metrics_manager.record_prediction(status="failure", latency_ms=latency_ms)
+        app_logger.error(f"Inference execution failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Inference execution error occurred."
@@ -96,6 +208,13 @@ def metrics_endpoint():
     """
     metrics = evaluate_model()
     return metrics
+
+@app.get("/metrics/prometheus", response_class=PlainTextResponse, summary="Prometheus Operational Metrics")
+def prometheus_metrics_endpoint():
+    """
+    Exposes operational metrics in standard Prometheus text format for scrapers.
+    """
+    return metrics_manager.generate_prometheus_format()
 
 @app.get("/monitoring/summary", summary="Inference Telemetry & Latency Summary")
 def monitoring_summary():
@@ -120,7 +239,7 @@ def submit_feedback(req: FeedbackRequest):
         predicted_class=req.predicted_class
     )
     if not success:
-        raise HTTPException(status_code=500, detail=msg)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)
     return {"status": "success", "message": msg, "prediction_id": req.prediction_id}
 
 if __name__ == "__main__":

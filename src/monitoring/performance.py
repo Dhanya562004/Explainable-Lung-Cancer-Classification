@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from src.config import FEEDBACK_LOG_PATH, CLASS_NAMES, CLASS_LABELS
 from src.evaluation.metrics import compute_classification_metrics
 
@@ -11,7 +11,7 @@ def log_ground_truth_feedback(prediction_id, verified_class, predicted_class=Non
     os.makedirs(os.path.dirname(FEEDBACK_LOG_PATH), exist_ok=True)
     payload = {
         'prediction_id': prediction_id,
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'verified_class': verified_class,
         'predicted_class': predicted_class
     }

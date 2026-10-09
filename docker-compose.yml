@@ -1,24 +1,35 @@
 version: '3.8'
 
 services:
-  streamlit:
-    build: .
-    container_name: lung_cancer_streamlit
-    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
-    ports:
-      - "8501:8501"
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-
   fastapi:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: lung_cancer_api
     command: uvicorn src.api.server:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - MAX_UPLOAD_SIZE_MB=10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lung_cancer_streamlit
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FASTAPI_URL=http://fastapi:8000
+    depends_on:
+      fastapi:
+        condition: service_healthy

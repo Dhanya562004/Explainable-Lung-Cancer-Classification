@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-service
+  labels:
+    app: explainable-lung-cancer
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http-api
+  selector:
+    app: explainable-lung-cancer
+    component: api
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamlit-service
+  labels:
+    app: explainable-lung-cancer
+    component: ui
+spec:
+  type: NodePort
+  ports:
+    - port: 8501
+      targetPort: 8501
+      nodePort: 30501
+      name: http-ui
+  selector:
+    app: explainable-lung-cancer
+    component: ui

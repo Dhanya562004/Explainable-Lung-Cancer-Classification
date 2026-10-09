@@ -26,6 +26,9 @@ results/monitoring/*.jsonl
 # Large Model Binaries (optional ignore if keeping model in git)
 # models/*.keras
 
-# IDE
+# IDE & Tools
 .vscode/
 .idea/
+.gemini/
+scratch/
+

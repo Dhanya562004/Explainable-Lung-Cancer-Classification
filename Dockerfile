@@ -1,8 +1,13 @@
 FROM python:3.10-slim
 
+# Prevent Python from writing .pyc files and buffer outputs
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies securely
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1-mesa-glx \
@@ -10,16 +15,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Create non-root runtime user
+RUN useradd -m -u 10001 appuser
 
-# Copy application files
+# Copy and install python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application source code and models
 COPY . .
 
-# Expose Streamlit and FastAPI ports
-EXPOSE 8501
-EXPOSE 8000
+# Set permissions for non-root user
+RUN chown -R appuser:appuser /app
 
-# Default command launches Streamlit application
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+USER appuser
+
+# Expose ports for FastAPI (8000) and Streamlit (8501)
+EXPOSE 8000
+EXPOSE 8501
+
+# Liveness container health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health/live || exit 1
+
+# Default execution: run FastAPI production server
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8000"]

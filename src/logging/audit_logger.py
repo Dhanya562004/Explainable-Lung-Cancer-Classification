@@ -2,7 +2,7 @@ import os
 import json
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from src.config import AUDIT_LOG_PATH, INFERENCE_LOG_PATH
 
 def log_audit_event(event_type, details, log_path=AUDIT_LOG_PATH):
@@ -13,7 +13,7 @@ def log_audit_event(event_type, details, log_path=AUDIT_LOG_PATH):
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     payload = {
         'request_id': str(uuid.uuid4()),
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'event_type': event_type,
         'details': details
     }
@@ -32,7 +32,7 @@ def log_inference_event(predicted_class, confidence, confidence_level, latency_m
     os.makedirs(os.path.dirname(INFERENCE_LOG_PATH), exist_ok=True)
     payload = {
         'prediction_id': f"pred-{uuid.uuid4().hex[:10]}",
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'model_version': model_version,
         'predicted_class': predicted_class,
         'confidence': round(confidence, 2),

@@ -1,6 +1,6 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 import tensorflow as tf
 
@@ -103,7 +103,7 @@ def predict_ct_scan(img_input, model_path=DEFAULT_MODEL_PATH, model=None):
         'predicted_index': predicted_idx,
         'model_version': model_version,
         'inference_latency_ms': round(latency_ms, 2),
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'requires_human_review': requires_human_review,
         'recommendation': "Low-confidence prediction (<60%). Human expert review is recommended." if requires_human_review else "Prediction confidence acceptable.",
         'original_image': original_img,
